@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Calendar App</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      body,
+      html {
+        height: 100%;
+        background-color: rgb(30, 30, 30);
+      }
+
+      .day-box {
+        aspect-ratio: 1 / 1;
+        border: 1px solid #393939;
+        display: flex;
+
+        flex-direction: row-reverse;
+        padding: 0.5rem 1rem 0 0;
+        font-size: 1rem;
+        color: #ddd;
+        cursor: pointer;
+        background-color: none;
+      }
+      .day-box.greyed-out {
+        background-color: #2c2c2c;
+        color: #2c2c2c;
+        pointer-events: none; /* Disable clicking */
+      }
+      .day-box.neutral {
+        background-color: none;
+        color: #ddd;
+      }
+      .day-box.hit {
+        background-color: rgb(15, 109, 2);
+        color: rgb(127, 255, 110);
+      }
+      .day-box.miss {
+        background-color: rgb(142, 0, 0);
+        color: rgb(255, 93, 93);
+      }
+
+      .day-box:hover {
+        border: 1px solid #525252;
+      }
+
+      .day-label {
+        text-align: center;
+        font-weight: bold;
+        margin-bottom: 5px;
+        color: #ddd;
+      }
+      .swipe-area {
+        touch-action: pan-y;
+      }
+      .calendar-center-wrapper {
+        width: 50%;
+        margin: 0 auto;
+      }
+
+      .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 5px;
+        width: 100%;
+      }
+
+      .header {
+        background-color: rgb(23, 23, 23);
+        display: flex;
+        align-items: center;
+        padding: 1rem 1rem;
+        gap: 1rem;
+      }
+      #monthYear {
+        color: #ddd;
+      }
+      #habit-header {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: rgb(255, 255, 255);
+        font-size: 1.5rem;
+        font-weight: 700;
+      }
+
+      @media (max-width: 768px) {
+        .calendar-center-wrapper {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <button onclick="GoBack()" class="btn btn-dark">&lt;</button>
+
+      <div data-habitid="<%=habitId%>" id="habit-header"><%=nameOfHabit%></div>
+    </div>
+    <div class="container mt-4">
+      <div class="calendar-center-wrapper">
+        <div class="row align-items-center mb-3">
+          <div class="col-6">
+            <h4 id="monthYear"></h4>
+          </div>
+          <div class="col-6 text-end">
+            <button id="prevMonth" class="btn btn-dark">&lt;</button>
+            <button id="nextMonth" class="btn btn-dark">&gt;</button>
+          </div>
+        </div>
+        <div class="calendar-grid mb-2">
+          <div class="day-label">Sun</div>
+          <div class="day-label">Mon</div>
+          <div class="day-label">Tue</div>
+          <div class="day-label">Wed</div>
+          <div class="day-label">Thu</div>
+          <div class="day-label">Fri</div>
+          <div class="day-label">Sat</div>
+        </div>
+        <div id="calendar" class="calendar-grid swipe-area"></div>
+      </div>
+    </div>
+
+    <!-- Scripts remain the same -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://hammerjs.github.io/dist/hammer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <script>
+      const monthYear = document.getElementById("monthYear");
+      const calendar = document.getElementById("calendar");
+      const prevMonthBtn = document.getElementById("prevMonth");
+      const nextMonthBtn = document.getElementById("nextMonth");
+
+      let currentDate = new Date();
+
+      function renderCalendar(date) {
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const today = new Date();
+
+        monthYear.textContent = `${date.toLocaleString("default", {
+          month: "long",
+        })} ${year}`;
+
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+
+        let html = "";
+
+        for (let i = 1; i <= firstDay.getDay(); i++) {
+          html += `<div class="day-box"></div>`;
+        }
+
+        for (let i = 1; i <= lastDay.getDate(); i++) {
+          const dateBoxDate = new Date(year, month, i);
+          const isFutureDate = dateBoxDate > today;
+          const greyedOutClass = isFutureDate ? "greyed-out" : "";
+          html += `<div data-month=${
+            month + 1
+          } data-day=${i} data-year=${year} class="day-box ${greyedOutClass}">${i}</div>`;
+        }
+
+        const totalDays = firstDay.getDay() + lastDay.getDate();
+        const remainingDays = 42 - totalDays; // 6 weeks * 7 days = 42
+
+        for (let i = 1; i <= remainingDays; i++) {
+          html += '<div class="day-box"></div>';
+        }
+
+        calendar.innerHTML = html;
+      }
+
+      function renderDayColors() {
+        const allDayBoxes = document.querySelectorAll(
+          ".day-box:not(.greyed-out)"
+        );
+        const habitId = document.getElementById("habit-header").dataset.habitid;
+        allDayBoxes.forEach((dayBox) => {
+          const day = dayBox.dataset.day;
+          const month = dayBox.dataset.month;
+          const year = dayBox.dataset.year;
+          if (month) {
+            axios
+              .get(
+                `/habit/${habitId}/status?month=${month}&year=${year}&day=${day}`
+              )
+              .then((response) => {
+                dayBox.classList.remove("neutral", "hit", "miss");
+                dayBox.classList.add(response.data.status);
+                dayBox.setAttribute("data-state", response.data.status);
+                dayBox.addEventListener("click", () => {
+                  ChangeToNextState(dayBox);
+                });
+              })
+              .catch((err) => {
+                console.log(err);
+              });
+          }
+        });
+      }
+
+      function changeMonth(delta) {
+        currentDate.setMonth(currentDate.getMonth() + delta);
+        renderCalendar(currentDate);
+        renderDayColors();
+      }
+
+      prevMonthBtn.addEventListener("click", () => changeMonth(-1));
+      nextMonthBtn.addEventListener("click", () => changeMonth(1));
+
+      const hammer = new Hammer(calendar);
+      hammer.on("swipeleft", () => changeMonth(1));
+      hammer.on("swiperight", () => changeMonth(-1));
+
+      function ChangeToNextState(dayBox) {
+        const states = ["neutral", "hit", "miss"];
+        let currentState = dayBox.getAttribute("data-state");
+        let nextStateIndex = states.indexOf(currentState);
+        nextStateIndex++;
+        let nextState = states[nextStateIndex % states.length];
+
+        const habitId = document.getElementById("habit-header").dataset.habitid;
+        let day = dayBox.dataset.day;
+        let month = dayBox.dataset.month;
+        let year = dayBox.dataset.year;
+
+        axios
+          .post(
+            `/habit/${habitId}/status?month=${month}&year=${year}&day=${day}&to=${nextState}`
+          )
+          .then((resp) => {
+            dayBox.classList.remove("neutral", "hit", "miss");
+            dayBox.classList.add(nextState);
+            dayBox.setAttribute("data-state", nextState);
+          })
+          .catch((err) => {
+            console.log(err);
+          });
+      }
+
+      function GoBack() {
+        window.location.href = "/habits";
+      }
+
+      renderCalendar(currentDate);
+      renderDayColors();
+    </script>
+  </body>
+</html>
